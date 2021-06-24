@@ -21,7 +21,7 @@ contract('NFTStakeContract', (accounts) => {
         await NFTContract.mintNFT({from: deployer})
     })
 
-    let endingDate = parseInt((((new Date()).getTime() / 1000) + 20000).toString())
+    let endingDate = parseInt((((new Date()).getTime() / 1000) + 20000).toFixed().toString())
 
     it('should create a pool', async () => {
         const poolArgs = {
@@ -54,7 +54,12 @@ contract('NFTStakeContract', (accounts) => {
         let advtime = 2000
         console.log({advtime})
         await helper.advanceTime(advtime, NFTStake.web3)
-        console.log('CLAIMABLE:', await NFTStakeContract.calculateRewards(0, tokens))
+        try {
+            // console.log('CLAIMABLE:', await NFTStakeContract.calculateRewards(0, tokens, ((new Date().getTime() / 1000)).toFixed()))
+
+         } catch (e) {
+            console.log(e)
+        }
 
     })
 
@@ -70,7 +75,7 @@ contract('NFTStakeContract', (accounts) => {
         let advtime = 1000
         console.log({advtime})
         await helper.advanceTime(advtime, NFTStake.web3)
-        console.log('CLAIMABLE:', await NFTStakeContract.calculateRewards(0, tokens))
+        // // console.log('CLAIMABLE:', await NFTStakeContract.calculateRewards(0, tokens,((new Date()).getTime() / 1000).toFixed()))
         await NFTStakeContract.claimReward(0, tokens)
         let afterBalance2 = await ERC20Contract.balanceOf(deployer)
         console.log("afterBalance2")
@@ -83,11 +88,15 @@ contract('NFTStakeContract', (accounts) => {
         let advtime2 = 9000
         console.log({advtime2})
         await helper.advanceTime(advtime2, NFTStake.web3)
-        console.log('CLAIMABLE:', await NFTStakeContract.calculateRewards(0, tokens))
+        try {
+            // console.log('CLAIMABLE:', await NFTStakeContract.calculateRewards(0, tokens,((new Date()).getTime() / 1000).toFixed()))
+        } catch (e) {
+            console.log(e)
+        }
 
-        const rewardCalculationFuture3 = await NFTStakeContract.calculateRewards(0, tokens)
+        // const rewardCalculationFuture3 = await NFTStakeContract.calculateRewards(0, tokens,((new Date()).getTime() / 1000).toFixed())
         console.log("rewardCalculationFuture3:")
-        console.log(rewardCalculationFuture3)
+        // console.log(rewardCalculationFuture3)
         await NFTStakeContract.claimReward(0, tokens)
         let afterBalance3 = await ERC20Contract.balanceOf(deployer)
         console.log("afterBalance3")
@@ -99,9 +108,9 @@ contract('NFTStakeContract', (accounts) => {
         console.log({advtime3})
         await helper.advanceTime(advtime3, NFTStake.web3)
 
-        const rewardCalculationFuture4 = await NFTStakeContract.calculateRewards(0, tokens)
+        // const rewardCalculationFuture4 = await NFTStakeContract.calculateRewards(0, tokens)
         console.log("rewardCalculationFuture4:")
-        console.log(rewardCalculationFuture4)
+        // console.log(rewardCalculationFuture4)
         console.log('Total rewards distributed: ', await NFTStakeContract.ClaimedPoolRewards(0))
 
         await NFTStakeContract.claimReward(0, tokens)

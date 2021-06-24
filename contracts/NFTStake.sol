@@ -46,7 +46,25 @@ contract NFTStake is Ownable, ERC165Storage {
     mapping(uint256 => mapping(uint256 => Stake)) public Stakes;
 
 
+    event PoolCreated(uint256 pid, address nftContract,
+        address rewardContract,
+        uint256 rewardSupply,
+        uint256 cycle,
+        uint256 rewardPerCycle,
+        uint256 maxCycles,
+        uint256 endingDate);
 
+    event PoolEnded(uint256 pid);
+
+    event Staked(uint256 pid,
+        uint256[] tokenIds);
+
+    event UnStaked(uint256 pid,
+        uint256[] tokenIds);
+
+    event Claimed(uint256 pid,
+        uint256[] tokenIds,
+        uint256 amount);
 
     struct NFTPool {
         IERC721 nftContract;
@@ -72,8 +90,16 @@ contract NFTStake is Ownable, ERC165Storage {
 
     function createPool(NFTPool memory _pool) external onlyOwner {
         Pools[currentPoolId] = _pool;
-        currentPoolId += 1;
         require(_pool.rewardContract.transferFrom(msg.sender, address(this), _pool.rewardSupply));
+        emit PoolCreated(currentPoolId,
+            address(_pool.nftContract),
+            address (_pool.rewardContract),
+            _pool.rewardSupply,
+            _pool.cycle,
+            _pool.rewardPerCycle,
+            _pool.maxCycles,
+            _pool.endingDate);
+        currentPoolId += 1;
     }
 
     function updatePool(uint256 pid, uint256 endingDate, uint256 maxCycles) external onlyOwner {
@@ -87,6 +113,8 @@ contract NFTStake is Ownable, ERC165Storage {
         uint256 remainingTokens = Pools[pid].rewardSupply - ClaimedPoolRewards[pid];
         Pools[pid].rewardContract.transfer(owner(), remainingTokens);
         Pools[pid].isActive = false;
+
+        emit PoolEnded(pid);
     }
 
     function enterStaking(uint256 pid, uint256[] memory tokenIds) external {
@@ -148,19 +176,19 @@ contract NFTStake is Ownable, ERC165Storage {
     function _claimRewards(uint256 pid, uint256[] memory tokenIds) internal {
         //        require(block.timestamp < Pools[pid].endingDate, "Pool is expired");
         uint256 poolMaxCycle = Pools[pid].maxCycles;
+        uint256 _total = 0;
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].isActive, "Not staked");
             if (Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle) {
-                _claim(pid, tokenIds[i], 0);
+                (uint256 toBeClaimed, uint256 currentCycleCount) = _claimCalculate(pid, tokenIds[i]);
+                _claim(pid, tokenIds[i], toBeClaimed,currentCycleCount, 0);
+                _total += toBeClaimed;
             }
         }
     }
 
-    function _claim(uint256 pid, uint256 tokenId, uint256 _multiplier) internal {
-        // calculate
-        if (_multiplier == 0) {
-            _multiplier = 1;
-        }
+
+    function _claimCalculate(uint256 pid, uint256 tokenId) internal returns(uint256, uint256){
         uint256 toBeClaimed = 0;
         uint256 poolMaxClaim = Pools[pid].maxCycles;
         uint256 cyclesSinceStart = ((block.timestamp - Stakes[pid][tokenId].startTime) / Pools[pid].cycle);
@@ -168,10 +196,16 @@ contract NFTStake is Ownable, ERC165Storage {
             cyclesSinceStart = poolMaxClaim;
         }
         uint256 currentCycleCount = cyclesSinceStart - Stakes[pid][tokenId].lastCycle;
-
         require(currentCycleCount <= poolMaxClaim, "YOU CANNOT CLAIM THIS STAKE ANYMORE!");
-
         toBeClaimed += currentCycleCount * Pools[pid].rewardPerCycle;
+        return (toBeClaimed, currentCycleCount);
+    }
+
+    function _claim(uint256 pid, uint256 tokenId, uint256 toBeClaimed, uint256 currentCycleCount, uint256 _multiplier) internal {
+        // calculate
+        if (_multiplier == 0) {
+            _multiplier = 1;
+        }
         // increase amount and cycle count for that nft, prevent someone else buying it and staking again
 
         Stakes[pid][tokenId].claimedTokens += toBeClaimed;
