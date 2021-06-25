@@ -47,7 +47,6 @@ contract NFTStake is Ownable, ERC165Storage {
     // mapping of active stakings by wallet. poolid => address =>  active stake count;
     mapping(uint256 => mapping(address => uint256)) public ActiveStakes;
 
-
     event PoolCreated(uint256 pid, address nftContract,
         address rewardContract,
         uint256 rewardSupply,
@@ -165,6 +164,8 @@ contract NFTStake is Ownable, ERC165Storage {
             Stakes[pid][tokenIds[i]] = newStake;
             ActiveStakes[pid][msg.sender] += 1;
         }
+
+        emit Staked(pid, tokenIds);
     }
     // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier. so this way we will generate unique signatures each time.
     // @param multiplier must be signed by pool signer.
@@ -175,9 +176,9 @@ contract NFTStake is Ownable, ERC165Storage {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
             // transferFrom(address,address,uint256) = 0x23b872dd
+            Stakes[pid][tokenIds[i]].isActive = false;
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
-            Stakes[pid][tokenIds[i]].isActive = false;
         }
     }
 
@@ -185,11 +186,11 @@ contract NFTStake is Ownable, ERC165Storage {
     function unStakeWithoutRewards(uint256 pid, uint256[] memory tokenIds) external {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
+            Stakes[pid][tokenIds[i]].isActive = false;
+            Stakes[pid][tokenIds[i]].startTime = block.timestamp;
             // transferFrom(address,address,uint256) = 0x23b872dd
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
-            Stakes[pid][tokenIds[i]].isActive = false;
-            Stakes[pid][tokenIds[i]].startTime = block.timestamp;
         }
     }
 
