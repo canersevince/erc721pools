@@ -29,7 +29,7 @@ THIS CONTRACT CREATES NFT STAKING POOLS WITH FIXED REWARDS. REWARDS ARE CYCLE BA
 
 contract NFTStake is Ownable, ERC165Storage {
     using Strings for uint256;
-    address public signer;
+//    address public signer;
 
     constructor(/*address _signer*/){
         _registerInterface(IERC721Receiver.onERC721Received.selector);
