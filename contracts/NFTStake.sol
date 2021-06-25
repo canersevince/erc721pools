@@ -5,6 +5,7 @@ import "./lib/@openzeppelin/contracts/token/erc20/IERC20.sol";
 import "./lib/@openzeppelin/contracts/token/erc721/IERC721.sol";
 import "./lib/@openzeppelin/contracts/token/erc721/IERC721Receiver.sol";
 import "./lib/@openzeppelin/contracts/utils/introspection/ERC165Storage.sol";
+import "./lib/@openzeppelin/contracts/utils/Strings.sol";
 
 pragma solidity ^0.8.0;
 
@@ -25,12 +26,14 @@ THIS CONTRACT CREATES NFT STAKING POOLS WITH FIXED REWARDS. REWARDS ARE CYCLE BA
 */
 
 
+
 contract NFTStake is Ownable, ERC165Storage {
+    using Strings for uint256;
     address public signer;
 
-    constructor(address _signer){
+    constructor(/*address _signer*/){
         _registerInterface(IERC721Receiver.onERC721Received.selector);
-        signer = _signer;
+        //        signer = _signer;
     }
 
     uint256 public currentPoolId = 0;
@@ -44,7 +47,7 @@ contract NFTStake is Ownable, ERC165Storage {
     // pool id => tokenId => stake
     mapping(uint256 => mapping(uint256 => Stake)) public Stakes;
 
-    // mapping of active stakings by wallet. poolid => address =>  active stake count;
+    // mapping of active staking count by wallet. poolid => address =>  active stake count. will be used with pool parameter: maxStakePerWallet
     mapping(uint256 => mapping(address => uint256)) public ActiveStakes;
 
     event PoolCreated(uint256 pid, address nftContract,
@@ -169,8 +172,8 @@ contract NFTStake is Ownable, ERC165Storage {
     }
     // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier. so this way we will generate unique signatures each time.
     // @param multiplier must be signed by pool signer.
-    function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, bytes memory signature) external {
-        _isValidMultiplier(pid, bytes32(multiplier), signature);
+    function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
+        _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
         uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
         _claimRewards(pid, tokenIds, _multiplier);
         for (uint256 i = 0; i < tokenIds.length; i++) {
@@ -194,18 +197,20 @@ contract NFTStake is Ownable, ERC165Storage {
         }
     }
 
-    function claimReward(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, bytes memory signature) external {
-        _isValidMultiplier(pid, bytes32(multiplier), signature);
+    function claimReward(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
+        _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
         uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
         _claimRewards(pid, tokenIds, _multiplier);
     }
 
-    function _isValidMultiplier(uint256 pid, bytes32 multiplier, bytes memory sig) internal returns (bool) {
-        require(Pools[pid].multiplierSigner == recoverSigner(multiplier, sig), "HASH IS NOT SIGNED");
+    function _isValidMultiplier(uint256 pid, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory sig) internal view returns (bool) {
+        bytes32 _hash = toEthSignedMessageHash(multiplier, timestamp);
+        require(hash == _hash, "INVALID SIGNATURE. YOU CANNOT TRICK ME KEK");
+        require(Pools[pid].multiplierSigner == recoverSigner(_hash, sig), "HASH IS NOT SIGNED BY POOL OWNER");
         return true;
     }
 
-    function _sumTokenIdsAndPid(uint256 pid, uint256[] memory tokenIds) internal returns (uint256) {
+    function _sumTokenIdsAndPid(uint256 pid, uint256[] memory tokenIds) internal pure returns (uint256) {
         uint256 sum = 0;
         for (uint256 i; i < tokenIds.length; i++) {
             sum += tokenIds[i];
@@ -230,7 +235,7 @@ contract NFTStake is Ownable, ERC165Storage {
     }
 
 
-    function _claimCalculate(uint256 pid, uint256 tokenId) internal returns (uint256, uint256){
+    function _claimCalculate(uint256 pid, uint256 tokenId) internal view returns (uint256, uint256){
         uint256 toBeClaimed = 0;
         uint256 poolMaxClaim = Pools[pid].maxCycles;
         uint256 cyclesSinceStart = ((block.timestamp - Stakes[pid][tokenId].startTime) / Pools[pid].cycle);
@@ -318,4 +323,47 @@ contract NFTStake is Ownable, ERC165Storage {
 
         return ecrecover(message, v, r, s);
     }
+
+    function stringToBytes32(string memory source) public pure returns (bytes32 result) {
+        bytes memory tempEmptyStringTest = bytes(source);
+        if (tempEmptyStringTest.length == 0) {
+            return 0x0;
+        }
+
+        assembly {
+            result := mload(add(source, 32))
+        }
+    }
+
+    function checkSignature(bytes32 multiplier, bytes memory sig) internal pure returns (address){
+        return recoverSigner(multiplier, sig);
+    }
+
+    function toEthSignedMessageHash(uint256 _multiplier, uint256 timestamp) internal pure returns (bytes32) {
+        return keccak256(toSignMessage(_multiplier, timestamp));
+    }
+
+    function toSignMessage(uint256 _multiplier, uint256 timestamp) public pure returns (bytes memory) {
+        bytes memory message = abi.encodePacked(_multiplier.toString(),"-",timestamp.toString());
+        uint _len = message.length;
+        return abi.encodePacked("\x19Ethereum Signed Message:\n",_len.toString(),message);
+    }
+
+    function _getLen(uint256 _len) internal pure returns(uint256) {
+        return bytes(_len.toString()).length;
+    }
+
+    /*function msgText (uint256 _multiplier, uint256 timestamp) external view returns (string memory){
+                uint _len = _getLen(_multiplier);
+        return string(abi.encodePacked("\x19Ethereum Signed Message:\n",_len.toString(),"-",_multiplier.toString(),"-",timestamp.toString()));
+    }*/
+
+
+    /*function _isValidMultiplier2(uint256 pid, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory sig) public view returns (address) {
+        bytes32 _hash = toEthSignedMessageHash(multiplier, timestamp);
+        require(hash == _hash, "WRONG MSG");
+        return recoverSigner(hash, sig);
+    }*/
+
+
 }

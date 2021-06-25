@@ -7,6 +7,10 @@
     "test": "test"
   },
   "dependencies": {
+    "@ethersproject/bytes": "^5.3.0",
+    "@ethersproject/keccak256": "^5.3.0",
+    "@ethersproject/strings": "^5.3.0",
+    "ethers": "^5.3.1",
     "solc": "^0.8.5"
   },
   "devDependencies": {},
