@@ -174,8 +174,7 @@ contract NFTStake is Ownable, ERC165Storage {
     // @param multiplier must be signed by pool signer.
     function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
         _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
-        uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
-        _claimRewards(pid, tokenIds, _multiplier);
+        _claimRewards(pid, tokenIds, multiplier);
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
             // transferFrom(address,address,uint256) = 0x23b872dd
@@ -199,8 +198,7 @@ contract NFTStake is Ownable, ERC165Storage {
 
     function claimReward(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
         _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
-        uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
-        _claimRewards(pid, tokenIds, _multiplier);
+        _claimRewards(pid, tokenIds, multiplier);
     }
 
     function _isValidMultiplier(uint256 pid, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory sig) internal view returns (bool) {
