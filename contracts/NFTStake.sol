@@ -170,7 +170,7 @@ contract NFTStake is Ownable, ERC165Storage {
 
         emit Staked(pid, tokenIds);
     }
-    // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier. so this way we will generate unique signatures each time.
+    // @param multiplier should be uint bigger than 0.
     // @param multiplier must be signed by pool signer.
     function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
         _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
