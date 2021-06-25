@@ -29,9 +29,11 @@ WIP: MULTIPLIER BY SIGNATURE.
 
 
 contract NFTStake is Ownable, ERC165Storage {
+    address public signer;
 
-    constructor(){
+    constructor(address _signer){
         _registerInterface(IERC721Receiver.onERC721Received.selector);
+        signer = _signer;
     }
 
     uint256 public currentPoolId = 0;
@@ -75,6 +77,7 @@ contract NFTStake is Ownable, ERC165Storage {
         uint256 maxCycles;
         uint256 endingDate;
         bool isActive;
+        address multiplierSigner;
     }
 
     struct Stake {
@@ -93,7 +96,7 @@ contract NFTStake is Ownable, ERC165Storage {
         require(_pool.rewardContract.transferFrom(msg.sender, address(this), _pool.rewardSupply));
         emit PoolCreated(currentPoolId,
             address(_pool.nftContract),
-            address (_pool.rewardContract),
+            address(_pool.rewardContract),
             _pool.rewardSupply,
             _pool.cycle,
             _pool.rewardPerCycle,
@@ -160,8 +163,9 @@ contract NFTStake is Ownable, ERC165Storage {
         }
     }
 
-    function leaveStaking(uint256 pid, uint256[] memory tokenIds) external {
-        _claimRewards(pid, tokenIds);
+    function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, bytes32 signature) external {
+        _claimRewards(pid, tokenIds, multiplier);
+        _isValidMultiplier(multiplier, signature);
         for (uint256 i = 0; i < tokenIds.length; i++) {
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
@@ -169,11 +173,17 @@ contract NFTStake is Ownable, ERC165Storage {
         }
     }
 
-    function claimReward(uint256 pid, uint256[] memory tokenIds) external {
-        _claimRewards(pid, tokenIds);
+    function claimReward(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, bytes32 signature) external {
+        _isValidMultiplier(multiplier, signature);
+        _claimRewards(pid, tokenIds, multiplier);
     }
 
-    function _claimRewards(uint256 pid, uint256[] memory tokenIds) internal {
+    function _isValidMultiplier(uint256 multiplier, bytes32 sig) internal returns (bool) {
+        require(true);
+        return true;
+    }
+
+    function _claimRewards(uint256 pid, uint256[] memory tokenIds, uint256 multiplier) internal {
         //        require(block.timestamp < Pools[pid].endingDate, "Pool is expired");
         uint256 poolMaxCycle = Pools[pid].maxCycles;
         uint256 _total = 0;
@@ -181,14 +191,14 @@ contract NFTStake is Ownable, ERC165Storage {
             require(Stakes[pid][tokenIds[i]].isActive, "Not staked");
             if (Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle) {
                 (uint256 toBeClaimed, uint256 currentCycleCount) = _claimCalculate(pid, tokenIds[i]);
-                _claim(pid, tokenIds[i], toBeClaimed,currentCycleCount, 0);
+                _claim(pid, tokenIds[i], toBeClaimed, currentCycleCount, 0);
                 _total += toBeClaimed;
             }
         }
     }
 
 
-    function _claimCalculate(uint256 pid, uint256 tokenId) internal returns(uint256, uint256){
+    function _claimCalculate(uint256 pid, uint256 tokenId) internal returns (uint256, uint256){
         uint256 toBeClaimed = 0;
         uint256 poolMaxClaim = Pools[pid].maxCycles;
         uint256 cyclesSinceStart = ((block.timestamp - Stakes[pid][tokenId].startTime) / Pools[pid].cycle);
