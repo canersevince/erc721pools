@@ -30,7 +30,7 @@ THIS CONTRACT CREATES NFT STAKING POOLS WITH FIXED REWARDS. REWARDS ARE CYCLE BA
 
 contract SnowflakeNFTStake is Ownable, ERC165Storage {
     using Strings for uint256;
-//    address public signer;
+    //    address public signer;
 
     constructor(/*address _signer*/){
         _registerInterface(IERC721Receiver.onERC721Received.selector);
@@ -132,11 +132,9 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         // transfer NFTs to contract
         uint256 poolMaxCycle = Pools[pid].maxCycles;
         for (uint256 i = 0; i < tokenIds.length; i++) {
-
             // check if token staked before
             require(Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle, "Cannot stake anymore");
             require(Stakes[pid][tokenIds[i]].isActive == false, "NFT already staked. ?!?!?");
-
             // bytes32 method = keccak256("transferFrom");
             // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), tokenIds[i]));
@@ -184,6 +182,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
         }
+        emit UnStaked(pid, tokenIds);
     }
 
     // rescue your tokens, for emergency purposes. don't care about rewards, reset reward timer.
@@ -196,6 +195,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
         }
+        emit UnStaked(pid, tokenIds);
     }
 
     function claimReward(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
@@ -232,8 +232,8 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
                 _total += toBeClaimed * multiplier / 100;
             }
         }
-        if(_total>0){
-            require(Pools[pid].rewardContract.transferFrom(address(this), msg.sender, _total));
+        if (_total > 0) {
+            require(Pools[pid].rewardContract.transferFrom(address(this), msg.sender, _total), "CANNOT GIVE REWARD!");
         }
 
         emit Claimed(pid, tokenIds, _total);
@@ -269,17 +269,20 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         }
     }
 
-    function calculateRewards(uint256 pid, uint256[] memory tokenIds, uint256 timestamp) public view returns (uint256) {
+    function calculateRewards(uint256 pid, uint256[] memory tokenIds, uint256 _timestamp) public view returns (uint256) {
         uint256 totalClaimable = 0;
         uint256 poolMaxClaim = Pools[pid].maxCycles;
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
-            uint256 cyclesSinceStart = (timestamp - Stakes[pid][tokenIds[i]].startTime) / Pools[pid].cycle;
-            if (cyclesSinceStart > poolMaxClaim) {
-                cyclesSinceStart = poolMaxClaim;
+            uint256 timePassed = block.timestamp - Stakes[pid][tokenIds[i]].startTime;
+            if(timePassed > 0){
+                uint256 cyclesSinceStart = (timePassed / Pools[pid].cycle);
+                if (cyclesSinceStart > poolMaxClaim) {
+                    cyclesSinceStart = poolMaxClaim;
+                }
+                uint256 currentCycleCount = cyclesSinceStart - Stakes[pid][tokenIds[i]].lastCycle;
+                totalClaimable = totalClaimable + (currentCycleCount * Pools[pid].rewardPerCycle);
             }
-            uint256 currentCycleCount = cyclesSinceStart - Stakes[pid][tokenIds[i]].lastCycle;
-            totalClaimable = totalClaimable + (currentCycleCount * Pools[pid].rewardPerCycle);
         }
         return totalClaimable;
     }
@@ -297,7 +300,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
     pure
     returns (uint8, bytes32, bytes32)
     {
-        require(sig.length == 65);
+        require(sig.length == 65, "INVALID SIG");
 
         bytes32 r;
         bytes32 s;
@@ -349,12 +352,12 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
     }
 
     function toSignMessage(uint256 _multiplier, uint256 timestamp) public pure returns (bytes memory) {
-        bytes memory message = abi.encodePacked(_multiplier.toString(),"-",timestamp.toString());
+        bytes memory message = abi.encodePacked(_multiplier.toString(), "-", timestamp.toString());
         uint _len = message.length;
-        return abi.encodePacked("\x19Ethereum Signed Message:\n",_len.toString(),message);
+        return abi.encodePacked("\x19Ethereum Signed Message:\n", _len.toString(), message);
     }
 
-    function _getLen(uint256 _len) internal pure returns(uint256) {
+    function _getLen(uint256 _len) internal pure returns (uint256) {
         return bytes(_len.toString()).length;
     }
 
