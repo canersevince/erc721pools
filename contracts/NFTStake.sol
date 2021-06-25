@@ -202,6 +202,7 @@ contract NFTStake is Ownable, ERC165Storage {
     }
 
     function _isValidMultiplier(uint256 pid, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory sig) internal view returns (bool) {
+        require(block.timestamp > timestamp, "EXPIRED SIGNATURE");
         bytes32 _hash = toEthSignedMessageHash(multiplier, timestamp);
         require(hash == _hash, "INVALID SIGNATURE. YOU CANNOT TRICK ME KEK");
         require(Pools[pid].multiplierSigner == recoverSigner(_hash, sig), "HASH IS NOT SIGNED BY POOL OWNER");
@@ -342,12 +343,12 @@ contract NFTStake is Ownable, ERC165Storage {
     }
 
     function toSignMessage(uint256 _multiplier, uint256 timestamp) public pure returns (bytes memory) {
-        bytes memory message = abi.encodePacked(_multiplier.toString(),"-",timestamp.toString());
+        bytes memory message = abi.encodePacked(_multiplier.toString(), "-", timestamp.toString());
         uint _len = message.length;
-        return abi.encodePacked("\x19Ethereum Signed Message:\n",_len.toString(),message);
+        return abi.encodePacked("\x19Ethereum Signed Message:\n", _len.toString(), message);
     }
 
-    function _getLen(uint256 _len) internal pure returns(uint256) {
+    function _getLen(uint256 _len) internal pure returns (uint256) {
         return bytes(_len.toString()).length;
     }
 
