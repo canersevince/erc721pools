@@ -27,7 +27,8 @@ THIS CONTRACT CREATES NFT STAKING POOLS WITH FIXED REWARDS. REWARDS ARE CYCLE BA
 
 
 
-contract NFTStake is Ownable, ERC165Storage {
+
+contract SnowflakeNFTStake is Ownable, ERC165Storage {
     using Strings for uint256;
 //    address public signer;
 
@@ -170,11 +171,12 @@ contract NFTStake is Ownable, ERC165Storage {
 
         emit Staked(pid, tokenIds);
     }
-    // @param multiplier should be uint bigger than 0.
+    // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier. so this way we will generate unique signatures each time.
     // @param multiplier must be signed by pool signer.
     function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
         _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
-        _claimRewards(pid, tokenIds, multiplier);
+        uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
+        _claimRewards(pid, tokenIds, _multiplier);
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
             // transferFrom(address,address,uint256) = 0x23b872dd
@@ -198,11 +200,11 @@ contract NFTStake is Ownable, ERC165Storage {
 
     function claimReward(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
         _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
-        _claimRewards(pid, tokenIds, multiplier);
+        uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
+        _claimRewards(pid, tokenIds, _multiplier);
     }
 
     function _isValidMultiplier(uint256 pid, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory sig) internal view returns (bool) {
-        require(block.timestamp > timestamp, "EXPIRED SIGNATURE");
         bytes32 _hash = toEthSignedMessageHash(multiplier, timestamp);
         require(hash == _hash, "INVALID SIGNATURE. YOU CANNOT TRICK ME KEK");
         require(Pools[pid].multiplierSigner == recoverSigner(_hash, sig), "HASH IS NOT SIGNED BY POOL OWNER");
@@ -227,9 +229,13 @@ contract NFTStake is Ownable, ERC165Storage {
             if (Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle) {
                 (uint256 toBeClaimed, uint256 currentCycleCount) = _claimCalculate(pid, tokenIds[i]);
                 _claim(pid, tokenIds[i], toBeClaimed, currentCycleCount, 0);
-                _total += toBeClaimed * multiplier;
+                _total += toBeClaimed * multiplier / 100;
             }
         }
+        if(_total>0){
+            require(Pools[pid].rewardContract.transferFrom(address(this), msg.sender, _total));
+        }
+
         emit Claimed(pid, tokenIds, _total);
     }
 
@@ -343,12 +349,12 @@ contract NFTStake is Ownable, ERC165Storage {
     }
 
     function toSignMessage(uint256 _multiplier, uint256 timestamp) public pure returns (bytes memory) {
-        bytes memory message = abi.encodePacked(_multiplier.toString(), "-", timestamp.toString());
+        bytes memory message = abi.encodePacked(_multiplier.toString(),"-",timestamp.toString());
         uint _len = message.length;
-        return abi.encodePacked("\x19Ethereum Signed Message:\n", _len.toString(), message);
+        return abi.encodePacked("\x19Ethereum Signed Message:\n",_len.toString(),message);
     }
 
-    function _getLen(uint256 _len) internal pure returns (uint256) {
+    function _getLen(uint256 _len) internal pure returns(uint256) {
         return bytes(_len.toString()).length;
     }
 
