@@ -95,6 +95,7 @@ contract NFTStake is Ownable, ERC165Storage {
     function createPool(NFTPool memory _pool) external onlyOwner {
         Pools[currentPoolId] = _pool;
         require(_pool.rewardContract.transferFrom(msg.sender, address(this), _pool.rewardSupply));
+
         emit PoolCreated(currentPoolId,
             address(_pool.nftContract),
             address(_pool.rewardContract),
@@ -180,6 +181,7 @@ contract NFTStake is Ownable, ERC165Storage {
         }
     }
 
+    // rescue your tokens, for emergency purposes. don't care about rewards, reset reward timer.
     function unStakeWithoutRewards(uint256 pid, uint256[] memory tokenIds) external {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
@@ -187,6 +189,7 @@ contract NFTStake is Ownable, ERC165Storage {
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
             Stakes[pid][tokenIds[i]].isActive = false;
+            Stakes[pid][tokenIds[i]].startTime = block.timestamp;
         }
     }
 
@@ -219,9 +222,10 @@ contract NFTStake is Ownable, ERC165Storage {
             if (Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle) {
                 (uint256 toBeClaimed, uint256 currentCycleCount) = _claimCalculate(pid, tokenIds[i]);
                 _claim(pid, tokenIds[i], toBeClaimed, currentCycleCount, 0);
-                _total += toBeClaimed;
+                _total += toBeClaimed * multiplier;
             }
         }
+        emit Claimed(pid, tokenIds, _total);
     }
 
 
