@@ -228,14 +228,13 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
             require(Stakes[pid][tokenIds[i]].isActive, "Not staked");
             if (Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle) {
                 (uint256 toBeClaimed, uint256 currentCycleCount) = _claimCalculate(pid, tokenIds[i]);
-                _claim(pid, tokenIds[i], toBeClaimed, currentCycleCount, 0);
+                _claim(pid, tokenIds[i], toBeClaimed, currentCycleCount);
                 _total += toBeClaimed * multiplier / 100;
             }
         }
         if (_total > 0) {
             require(Pools[pid].rewardContract.transferFrom(address(this), msg.sender, _total), "CANNOT GIVE REWARD!");
         }
-
         emit Claimed(pid, tokenIds, _total);
     }
 
@@ -253,20 +252,12 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         return (toBeClaimed, currentCycleCount);
     }
 
-    function _claim(uint256 pid, uint256 tokenId, uint256 toBeClaimed, uint256 currentCycleCount, uint256 _multiplier) internal {
-        // calculate
-        if (_multiplier == 0) {
-            _multiplier = 1;
-        }
+    function _claim(uint256 pid, uint256 tokenId, uint256 toBeClaimed, uint256 currentCycleCount) internal {
         // increase amount and cycle count for that nft, prevent someone else buying it and staking again
         Stakes[pid][tokenId].claimedTokens += toBeClaimed;
         Stakes[pid][tokenId].lastCycle = Stakes[pid][tokenId].lastCycle + currentCycleCount;
         ClaimedPoolRewards[pid] += toBeClaimed;
         ActiveStakes[pid][msg.sender] -= 1;
-        // transferToken
-        if (toBeClaimed > 0) {
-            require(Pools[pid].rewardContract.transfer(Stakes[pid][tokenId].beneficiary, toBeClaimed * _multiplier), "ERROR toBeClaimed");
-        }
     }
 
     function calculateRewards(uint256 pid, uint256[] memory tokenIds, uint256 _timestamp) public view returns (uint256) {
