@@ -21,10 +21,7 @@ THIS CONTRACT CREATES NFT STAKING POOLS WITH FIXED REWARDS. REWARDS ARE CYCLE BA
 -USER CAN CLAIM ONE BY ONE OR MULTIPLE NFTS AT ONCE, REMANINING CLAIMS WILL BE KEPT.
 -AN NFT CANNOT BE STAKED AGAIN IF IT IS CLAIMED MAX CYCLE AMOUNT, FOR EXAMPLE IF YOU CLAIM YOUR REWARD 10 CYCLES AND POOL HAS 10 CYCLE LIMIT, YOU CANNOT STAKE THAT NFT ANYMORE.
 -INFINITE AMOUNT OF PAIRS CAN BE CREATED.
-
-WIP: MULTIPLIER BY SIGNATURE.
--
-
+-REWARD MULTIPLIER BY POOL SIGNER
 */
 
 
@@ -168,13 +165,25 @@ contract NFTStake is Ownable, ERC165Storage {
             ActiveStakes[pid][msg.sender] += 1;
         }
     }
-    // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier.
+    // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier. so this way we will generate unique signatures each time.
     // @param multiplier must be signed by pool signer.
     function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, bytes memory signature) external {
         _isValidMultiplier(pid, bytes32(multiplier), signature);
         uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
         _claimRewards(pid, tokenIds, _multiplier);
         for (uint256 i = 0; i < tokenIds.length; i++) {
+            require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
+            // transferFrom(address,address,uint256) = 0x23b872dd
+            (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
+            require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
+            Stakes[pid][tokenIds[i]].isActive = false;
+        }
+    }
+
+    function unStakeWithoutRewards(uint256 pid, uint256[] memory tokenIds) external {
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
+            // transferFrom(address,address,uint256) = 0x23b872dd
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
             Stakes[pid][tokenIds[i]].isActive = false;
@@ -205,6 +214,7 @@ contract NFTStake is Ownable, ERC165Storage {
         uint256 poolMaxCycle = Pools[pid].maxCycles;
         uint256 _total = 0;
         for (uint256 i = 0; i < tokenIds.length; i++) {
+            require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
             require(Stakes[pid][tokenIds[i]].isActive, "Not staked");
             if (Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle) {
                 (uint256 toBeClaimed, uint256 currentCycleCount) = _claimCalculate(pid, tokenIds[i]);
