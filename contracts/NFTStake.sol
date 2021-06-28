@@ -28,6 +28,7 @@ THIS CONTRACT CREATES NFT STAKING POOLS WITH FIXED REWARDS. REWARDS ARE CYCLE BA
 
 
 
+
 contract SnowflakeNFTStake is Ownable, ERC165Storage {
     using Strings for uint256;
     using EnumerableSet for EnumerableSet.UintSet;
@@ -176,16 +177,24 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
     }
     // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier. so this way we will generate unique signatures each time.
     // @param multiplier must be signed by pool signer.
-    function leaveStaking(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
-        _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
-        uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
+    function leaveStaking(uint256 pid, uint256[] memory multiplierParams, bytes32 hash, bytes memory signature) external {
+        uint256 _multiplier = multiplierParams[0];
+        _isValidMultiplier(pid, multiplierParams, hash, signature);
+        uint256[] memory tokenIds = new uint256[](multiplierParams.length-2);
+
+        for(uint256 idx = 0; idx<multiplierParams.length; idx++){
+            if(idx>1){
+                tokenIds[idx-2] = multiplierParams[idx];
+            }
+        }
+
         _claimRewards(pid, tokenIds, _multiplier);
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
             // transferFrom(address,address,uint256) = 0x23b872dd
             Stakes[pid][tokenIds[i]].isActive = false;
             CurrentStakedTokens[pid][msg.sender].remove(tokenIds[i]);
-        (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
+            (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
         }
         emit UnStaked(pid, tokenIds);
@@ -204,14 +213,23 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         emit UnStaked(pid, tokenIds);
     }
 
-    function claimReward(uint256 pid, uint256[] memory tokenIds, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory signature) external {
-        _isValidMultiplier(pid, multiplier, timestamp, hash, signature);
-        uint256 _multiplier = multiplier - _sumTokenIdsAndPid(pid, tokenIds);
+    function claimReward(uint256 pid, uint256[] memory multiplierParams, uint256 timestamp, bytes32 hash, bytes memory signature) external {
+        _isValidMultiplier(pid, multiplierParams, hash, signature);
+        uint256 _multiplier = multiplierParams[0];
+
+        uint256[] memory tokenIds = new uint256[](multiplierParams.length-2);
+
+        for(uint256 idx = 0; idx<multiplierParams.length; idx++){
+            if(idx>1){
+                tokenIds[idx-2] = multiplierParams[idx];
+            }
+        }
+
         _claimRewards(pid, tokenIds, _multiplier);
     }
 
-    function _isValidMultiplier(uint256 pid, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory sig) internal view returns (bool) {
-        bytes32 _hash = toEthSignedMessageHash(multiplier, timestamp);
+    function _isValidMultiplier(uint256 pid, uint256[] memory multiplierParams, bytes32 hash, bytes memory sig) internal view returns (bool) {
+        bytes32 _hash = tokenIdsToHex(multiplierParams);
         require(hash == _hash, "INVALID SIGNATURE. YOU CANNOT TRICK ME KEK");
         require(Pools[pid].multiplierSigner == recoverSigner(_hash, sig), "HASH IS NOT SIGNED BY POOL OWNER");
         return true;
@@ -330,29 +348,9 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         return ecrecover(message, v, r, s);
     }
 
-    function stringToBytes32(string memory source) public pure returns (bytes32 result) {
-        bytes memory tempEmptyStringTest = bytes(source);
-        if (tempEmptyStringTest.length == 0) {
-            return 0x0;
-        }
-
-        assembly {
-            result := mload(add(source, 32))
-        }
-    }
 
     function checkSignature(bytes32 multiplier, bytes memory sig) internal pure returns (address){
         return recoverSigner(multiplier, sig);
-    }
-
-    function toEthSignedMessageHash(uint256 _multiplier, uint256 timestamp) internal pure returns (bytes32) {
-        return keccak256(toSignMessage(_multiplier, timestamp));
-    }
-
-    function toSignMessage(uint256 _multiplier, uint256 timestamp) public pure returns (bytes memory) {
-        bytes memory message = abi.encodePacked(_multiplier.toString(), "-", timestamp.toString());
-        uint _len = message.length;
-        return abi.encodePacked("\x19Ethereum Signed Message:\n", _len.toString(), message);
     }
 
     function _getLen(uint256 _len) internal pure returns (uint256) {
@@ -378,17 +376,19 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         }
     }
 
-    /*function msgText (uint256 _multiplier, uint256 timestamp) external view returns (string memory){
-                uint _len = _getLen(_multiplier);
-        return string(abi.encodePacked("\x19Ethereum Signed Message:\n",_len.toString(),"-",_multiplier.toString(),"-",timestamp.toString()));
-    }*/
+    function tokenIdsToHex(uint256[] memory tokenIds) public view virtual returns (bytes32) {
+        bytes memory message;
+        for(uint256 i = 0; i<tokenIds.length; i++) {
+            message = abi.encodePacked(message, tokenIds[i].toHexString());
+        }
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", message.length.toString(), message));
+    }
 
-
-    /*function _isValidMultiplier2(uint256 pid, uint256 multiplier, uint256 timestamp, bytes32 hash, bytes memory sig) public view returns (address) {
-        bytes32 _hash = toEthSignedMessageHash(multiplier, timestamp);
-        require(hash == _hash, "WRONG MSG");
-        return recoverSigner(hash, sig);
-    }*/
-
-
+    function tokenIdsToHexString(uint256[] memory tokenIds) public view virtual returns (string memory) {
+        bytes memory message;
+        for(uint256 i = 0; i<tokenIds.length; i++) {
+            message = abi.encodePacked(message, tokenIds[i].toHexString());
+        }
+        return string(abi.encodePacked("\x19Ethereum Signed Message:\n", message.length.toString(), message));
+    }
 }
