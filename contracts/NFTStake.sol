@@ -359,6 +359,25 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         return bytes(_len.toString()).length;
     }
 
+    function stakedTokenByIndex(uint256 pid, address owner, uint256 idx) public view virtual returns (uint256) {
+        return CurrentStakedTokens[pid][owner].at(idx);
+    }
+
+    function activeTokensOf(uint256 pid,address account)  external view returns (uint256[] memory){
+        uint256 tokenCount = ActiveStakes[pid][account];
+        if (tokenCount == 0) {
+            // Return an empty array
+            return new uint256[](0);
+        } else {
+            uint256[] memory result = new uint256[](tokenCount);
+            uint256 index;
+            for (index = 0; index < tokenCount; index++) {
+                result[index] = stakedTokenByIndex(pid, account, index);
+            }
+            return result;
+        }
+    }
+
     /*function msgText (uint256 _multiplier, uint256 timestamp) external view returns (string memory){
                 uint _len = _getLen(_multiplier);
         return string(abi.encodePacked("\x19Ethereum Signed Message:\n",_len.toString(),"-",_multiplier.toString(),"-",timestamp.toString()));
