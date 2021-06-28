@@ -175,17 +175,17 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
 
         emit Staked(pid, tokenIds);
     }
-    // @param multiplier should be calculated like this: pid + sum of tokenIds + multiplier. so this way we will generate unique signatures each time.
-    // @param multiplier must be signed by pool signer.
+    // @param multiplierParams is array of uint256s, first param is multiplier, second one is timestamp, rest is token ids to claim.
+    // @param multiplierParams hash must be signed by pool signer.
     function leaveStaking(uint256 pid, uint256[] memory multiplierParams, bytes32 hash, bytes memory signature) external {
         uint256 _multiplier = multiplierParams[0];
         require(multiplierParams[1] > block.timestamp, "SIGNATURE EXPIRED!");
         _isValidMultiplier(pid, multiplierParams, hash, signature);
-        uint256[] memory tokenIds = new uint256[](multiplierParams.length-2);
+        uint256[] memory tokenIds = new uint256[](multiplierParams.length - 2);
 
-        for(uint256 idx = 0; idx<multiplierParams.length; idx++){
-            if(idx>1){
-                tokenIds[idx-2] = multiplierParams[idx];
+        for (uint256 idx = 0; idx < multiplierParams.length; idx++) {
+            if (idx > 1) {
+                tokenIds[idx - 2] = multiplierParams[idx];
             }
         }
 
@@ -218,22 +218,15 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         _isValidMultiplier(pid, multiplierParams, hash, signature);
         uint256 _multiplier = multiplierParams[0];
         require(multiplierParams[1] > block.timestamp, "SIGNATURE EXPIRED!");
-        uint256[] memory tokenIds = new uint256[](multiplierParams.length-2);
+        uint256[] memory tokenIds = new uint256[](multiplierParams.length - 2);
 
-        for(uint256 idx = 0; idx<multiplierParams.length; idx++){
-            if(idx>1){
-                tokenIds[idx-2] = multiplierParams[idx];
+        for (uint256 idx = 0; idx < multiplierParams.length; idx++) {
+            if (idx > 1) {
+                tokenIds[idx - 2] = multiplierParams[idx];
             }
         }
 
         _claimRewards(pid, tokenIds, _multiplier);
-    }
-
-    function _isValidMultiplier(uint256 pid, uint256[] memory multiplierParams, bytes32 hash, bytes memory sig) internal view returns (bool) {
-        bytes32 _hash = tokenIdsToHex(multiplierParams);
-        require(hash == _hash, "INVALID SIGNATURE. YOU CANNOT TRICK ME KEK");
-        require(Pools[pid].multiplierSigner == recoverSigner(_hash, sig), "HASH IS NOT SIGNED BY POOL OWNER");
-        return true;
     }
 
     function _claimRewards(uint256 pid, uint256[] memory tokenIds, uint256 multiplier) internal {
@@ -255,6 +248,12 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         emit Claimed(pid, tokenIds, _total);
     }
 
+    function _isValidMultiplier(uint256 pid, uint256[] memory multiplierParams, bytes32 hash, bytes memory sig) internal view returns (bool) {
+        bytes32 _hash = tokenIdsToHex(multiplierParams);
+        require(hash == _hash, "INVALID SIGNATURE. YOU CANNOT TRICK ME KEK");
+        require(Pools[pid].multiplierSigner == recoverSigner(_hash, sig), "HASH IS NOT SIGNED BY POOL OWNER");
+        return true;
+    }
 
     function _claimCalculate(uint256 pid, uint256 tokenId) internal view returns (uint256, uint256){
         uint256 toBeClaimed = 0;
@@ -276,6 +275,62 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         ClaimedPoolRewards[pid] += toBeClaimed;
         ActiveStakes[pid][msg.sender] -= 1;
         CurrentStakedTokens[pid][msg.sender].add(tokenId);
+    }
+
+    function splitSignature(bytes memory sig) internal pure returns (uint8, bytes32, bytes32){
+        require(sig.length == 65, "INVALID SIG");
+
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+
+        assembly {
+        // first 32 bytes, after the length prefix
+            r := mload(add(sig, 32))
+        // second 32 bytes
+            s := mload(add(sig, 64))
+        // final byte (first byte of the next 32 bytes)
+            v := byte(0, mload(add(sig, 96)))
+        }
+
+        return (v, r, s);
+    }
+
+    function recoverSigner(bytes32 message, bytes memory sig) internal pure returns (address) {
+        uint8 v;
+        bytes32 r;
+        bytes32 s;
+
+        (v, r, s) = splitSignature(sig);
+
+        return ecrecover(message, v, r, s);
+    }
+
+    function activeTokensOf(uint256 pid, address account) external view returns (uint256[] memory){
+        uint256 tokenCount = ActiveStakes[pid][account];
+        if (tokenCount == 0) {
+            // Return an empty array
+            return new uint256[](0);
+        } else {
+            uint256[] memory result = new uint256[](tokenCount);
+            uint256 index;
+            for (index = 0; index < tokenCount; index++) {
+                result[index] = stakedTokenByIndex(pid, account, index);
+            }
+            return result;
+        }
+    }
+
+    function tokenIdsToHex(uint256[] memory tokenIds) public view virtual returns (bytes32) {
+        bytes memory message;
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            message = abi.encodePacked(message, tokenIds[i].toHexString());
+        }
+        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", message.length.toString(), message));
+    }
+
+    function _getLen(uint256 _len) internal pure returns (uint256) {
+        return bytes(_len.toString()).length;
     }
 
     function calculateRewards(uint256 pid, uint256[] memory tokenIds, uint256 _timestamp) public view returns (uint256) {
@@ -304,71 +359,8 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         return stakes;
     }
 
-    function splitSignature(bytes memory sig)
-    internal
-    pure
-    returns (uint8, bytes32, bytes32)
-    {
-        require(sig.length == 65, "INVALID SIG");
-
-        bytes32 r;
-        bytes32 s;
-        uint8 v;
-
-        assembly {
-        // first 32 bytes, after the length prefix
-            r := mload(add(sig, 32))
-        // second 32 bytes
-            s := mload(add(sig, 64))
-        // final byte (first byte of the next 32 bytes)
-            v := byte(0, mload(add(sig, 96)))
-        }
-
-        return (v, r, s);
-    }
-
-    function recoverSigner(bytes32 message, bytes memory sig)
-    internal
-    pure
-    returns (address)
-    {
-        uint8 v;
-        bytes32 r;
-        bytes32 s;
-
-        (v, r, s) = splitSignature(sig);
-
-        return ecrecover(message, v, r, s);
-    }
-
-    function activeTokensOf(uint256 pid,address account)  external view returns (uint256[] memory){
-        uint256 tokenCount = ActiveStakes[pid][account];
-        if (tokenCount == 0) {
-            // Return an empty array
-            return new uint256[](0);
-        } else {
-            uint256[] memory result = new uint256[](tokenCount);
-            uint256 index;
-            for (index = 0; index < tokenCount; index++) {
-                result[index] = stakedTokenByIndex(pid, account, index);
-            }
-            return result;
-        }
-    }
-
-    function tokenIdsToHex(uint256[] memory tokenIds) public view virtual returns (bytes32) {
-        bytes memory message;
-        for(uint256 i = 0; i<tokenIds.length; i++) {
-            message = abi.encodePacked(message, tokenIds[i].toHexString());
-        }
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", message.length.toString(), message));
-    }
-
     function stakedTokenByIndex(uint256 pid, address owner, uint256 idx) public view virtual returns (uint256) {
         return CurrentStakedTokens[pid][owner].at(idx);
-    }
-    function _getLen(uint256 _len) internal pure returns (uint256) {
-        return bytes(_len.toString()).length;
     }
 
     /*
