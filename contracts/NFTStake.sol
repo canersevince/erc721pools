@@ -341,19 +341,6 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         return ecrecover(message, v, r, s);
     }
 
-
-    function checkSignature(bytes32 multiplier, bytes memory sig) internal pure returns (address){
-        return recoverSigner(multiplier, sig);
-    }
-
-    function _getLen(uint256 _len) internal pure returns (uint256) {
-        return bytes(_len.toString()).length;
-    }
-
-    function stakedTokenByIndex(uint256 pid, address owner, uint256 idx) public view virtual returns (uint256) {
-        return CurrentStakedTokens[pid][owner].at(idx);
-    }
-
     function activeTokensOf(uint256 pid,address account)  external view returns (uint256[] memory){
         uint256 tokenCount = ActiveStakes[pid][account];
         if (tokenCount == 0) {
@@ -377,11 +364,20 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n", message.length.toString(), message));
     }
 
-    function tokenIdsToHexString(uint256[] memory tokenIds) public view virtual returns (string memory) {
-        bytes memory message;
-        for(uint256 i = 0; i<tokenIds.length; i++) {
-            message = abi.encodePacked(message, tokenIds[i].toHexString());
-        }
-        return string(abi.encodePacked("\x19Ethereum Signed Message:\n", message.length.toString(), message));
+    function stakedTokenByIndex(uint256 pid, address owner, uint256 idx) public view virtual returns (uint256) {
+        return CurrentStakedTokens[pid][owner].at(idx);
     }
+    function _getLen(uint256 _len) internal pure returns (uint256) {
+        return bytes(_len.toString()).length;
+    }
+
+    /*
+     function tokenIdsToHexString(uint256[] memory tokenIds) public view virtual returns (string memory) {
+         bytes memory message;
+         for(uint256 i = 0; i<tokenIds.length; i++) {
+             message = abi.encodePacked(message, tokenIds[i].toHexString());
+         }
+         return string(abi.encodePacked("\x19Ethereum Signed Message:\n", message.length.toString(), message));
+     }
+     */
 }
