@@ -6,7 +6,7 @@ import "./lib/@openzeppelin/contracts/token/erc721/IERC721.sol";
 import "./lib/@openzeppelin/contracts/token/erc721/IERC721Receiver.sol";
 import "./lib/@openzeppelin/contracts/utils/introspection/ERC165Storage.sol";
 import "./lib/@openzeppelin/contracts/utils/Strings.sol";
-
+import "./lib/@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 pragma solidity ^0.8.0;
 
 
@@ -30,6 +30,7 @@ THIS CONTRACT CREATES NFT STAKING POOLS WITH FIXED REWARDS. REWARDS ARE CYCLE BA
 
 contract SnowflakeNFTStake is Ownable, ERC165Storage {
     using Strings for uint256;
+    using EnumerableSet for EnumerableSet.UintSet;
     //    address public signer;
 
     constructor(/*address _signer*/){
@@ -48,8 +49,11 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
     // pool id => tokenId => stake
     mapping(uint256 => mapping(uint256 => Stake)) public Stakes;
 
-    // mapping of active staking count by wallet. poolid => address =>  active stake count. will be used with pool parameter: maxStakePerWallet
+    // mapping of active staking count by wallet.
+    //poolid => address =>  active stake count. will be used with pool parameter: maxStakePerWallet
+    //poolid => address =>  active staked tokenids count.
     mapping(uint256 => mapping(address => uint256)) public ActiveStakes;
+    mapping(uint256 => mapping(address => EnumerableSet.UintSet)) private CurrentStakedTokens;
 
     event PoolCreated(uint256 pid, address nftContract,
         address rewardContract,
@@ -165,6 +169,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
 
             Stakes[pid][tokenIds[i]] = newStake;
             ActiveStakes[pid][msg.sender] += 1;
+            CurrentStakedTokens[pid][msg.sender].add(tokenIds[i]);
         }
 
         emit Staked(pid, tokenIds);
@@ -179,7 +184,8 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
             // transferFrom(address,address,uint256) = 0x23b872dd
             Stakes[pid][tokenIds[i]].isActive = false;
-            (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
+            CurrentStakedTokens[pid][msg.sender].remove(tokenIds[i]);
+        (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
         }
         emit UnStaked(pid, tokenIds);
@@ -258,6 +264,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         Stakes[pid][tokenId].lastCycle = Stakes[pid][tokenId].lastCycle + currentCycleCount;
         ClaimedPoolRewards[pid] += toBeClaimed;
         ActiveStakes[pid][msg.sender] -= 1;
+        CurrentStakedTokens[pid][msg.sender].add(tokenId);
     }
 
     function calculateRewards(uint256 pid, uint256[] memory tokenIds, uint256 _timestamp) public view returns (uint256) {
@@ -266,7 +273,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
 
         for (uint256 i = 0; i < tokenIds.length; i++) {
             uint256 timePassed = block.timestamp - Stakes[pid][tokenIds[i]].startTime;
-            if(timePassed > 0){
+            if (timePassed > 0) {
                 uint256 cyclesSinceStart = (timePassed / Pools[pid].cycle);
                 if (cyclesSinceStart > poolMaxClaim) {
                     cyclesSinceStart = poolMaxClaim;
