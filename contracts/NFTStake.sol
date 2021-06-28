@@ -179,6 +179,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
     // @param multiplier must be signed by pool signer.
     function leaveStaking(uint256 pid, uint256[] memory multiplierParams, bytes32 hash, bytes memory signature) external {
         uint256 _multiplier = multiplierParams[0];
+        require(multiplierParams[1] > block.timestamp, "SIGNATURE EXPIRED!");
         _isValidMultiplier(pid, multiplierParams, hash, signature);
         uint256[] memory tokenIds = new uint256[](multiplierParams.length-2);
 
@@ -216,7 +217,7 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
     function claimReward(uint256 pid, uint256[] memory multiplierParams, uint256 timestamp, bytes32 hash, bytes memory signature) external {
         _isValidMultiplier(pid, multiplierParams, hash, signature);
         uint256 _multiplier = multiplierParams[0];
-
+        require(multiplierParams[1] > block.timestamp, "SIGNATURE EXPIRED!");
         uint256[] memory tokenIds = new uint256[](multiplierParams.length-2);
 
         for(uint256 idx = 0; idx<multiplierParams.length; idx++){
@@ -233,14 +234,6 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         require(hash == _hash, "INVALID SIGNATURE. YOU CANNOT TRICK ME KEK");
         require(Pools[pid].multiplierSigner == recoverSigner(_hash, sig), "HASH IS NOT SIGNED BY POOL OWNER");
         return true;
-    }
-
-    function _sumTokenIdsAndPid(uint256 pid, uint256[] memory tokenIds) internal pure returns (uint256) {
-        uint256 sum = 0;
-        for (uint256 i; i < tokenIds.length; i++) {
-            sum += tokenIds[i];
-        }
-        return sum + pid;
     }
 
     function _claimRewards(uint256 pid, uint256[] memory tokenIds, uint256 multiplier) internal {
