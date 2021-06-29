@@ -126,8 +126,8 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         // transfer remaining funds to owner
         require(Pools[pid].endingDate < block.timestamp || Pools[pid].rewardSupply >= ClaimedPoolRewards[pid], "CANNOT END POOL.");
         uint256 remainingTokens = Pools[pid].rewardSupply - ClaimedPoolRewards[pid];
-        require(Pools[pid].rewardContract.transfer(owner(), remainingTokens));
         Pools[pid].isActive = false;
+        require(Pools[pid].rewardContract.transfer(owner(), remainingTokens));
         emit PoolEnded(pid);
     }
 
