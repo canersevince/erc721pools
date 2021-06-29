@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 
-import "./lib/@openzeppelin/contracts/access/Ownable.sol";
-import "./lib/@openzeppelin/contracts/token/erc20/IERC20.sol";
-import "./lib/@openzeppelin/contracts/token/erc721/IERC721.sol";
-import "./lib/@openzeppelin/contracts/token/erc721/IERC721Receiver.sol";
-import "./lib/@openzeppelin/contracts/utils/introspection/ERC165Storage.sol";
-import "./lib/@openzeppelin/contracts/utils/Strings.sol";
-import "./lib/@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import "../lib/@openzeppelin/contracts/access/Ownable.sol";
+import "../lib/@openzeppelin/contracts/token/erc20/IERC20.sol";
+import "../lib/@openzeppelin/contracts/token/erc721/IERC721.sol";
+import "../lib/@openzeppelin/contracts/token/erc721/IERC721Receiver.sol";
+import "../lib/@openzeppelin/contracts/utils/introspection/ERC165Storage.sol";
+import "../lib/@openzeppelin/contracts/utils/Strings.sol";
+import "../lib/@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 pragma solidity ^0.8.0;
 
 
@@ -124,9 +124,8 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         // transfer remaining funds to owner
         require(Pools[pid].endingDate < block.timestamp || Pools[pid].rewardSupply >= ClaimedPoolRewards[pid], "CANNOT END POOL.");
         uint256 remainingTokens = Pools[pid].rewardSupply - ClaimedPoolRewards[pid];
-        Pools[pid].rewardContract.transfer(owner(), remainingTokens);
+        require(Pools[pid].rewardContract.transfer(owner(), remainingTokens));
         Pools[pid].isActive = false;
-
         emit PoolEnded(pid);
     }
 
@@ -140,12 +139,6 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
             // check if token staked before
             require(Stakes[pid][tokenIds[i]].lastCycle < poolMaxCycle, "Cannot stake anymore");
             require(Stakes[pid][tokenIds[i]].isActive == false, "NFT already staked. ?!?!?");
-            // bytes32 method = keccak256("transferFrom");
-            // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
-            (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), tokenIds[i]));
-            require(success, "CANNOT TRANSFER NFT");
-            // create stakes for each
-            // pool id => tokenId => stake
             /*
             uint256 poolId;
             address beneficiary;
@@ -171,6 +164,13 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
             Stakes[pid][tokenIds[i]] = newStake;
             ActiveStakes[pid][msg.sender] += 1;
             CurrentStakedTokens[pid][msg.sender].add(tokenIds[i]);
+            // bytes32 method = keccak256("transferFrom");
+            // bytes4(keccak256(bytes('transferFrom(address,address,uint256)')));
+            (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, msg.sender, address(this), tokenIds[i]));
+            require(success, "CANNOT TRANSFER NFT");
+            // create stakes for each
+            // pool id => tokenId => stake
+
         }
 
         emit Staked(pid, tokenIds);
@@ -193,8 +193,6 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
         for (uint256 i = 0; i < tokenIds.length; i++) {
             require(Stakes[pid][tokenIds[i]].beneficiary == msg.sender, "Not the stake owner");
             // transferFrom(address,address,uint256) = 0x23b872dd
-            Stakes[pid][tokenIds[i]].isActive = false;
-            CurrentStakedTokens[pid][msg.sender].remove(tokenIds[i]);
             (bool success,) = address(Pools[pid].nftContract).call(abi.encodeWithSelector(0x23b872dd, address(this), msg.sender, tokenIds[i]));
             require(success, "CANNOT REFUND NFT? SOMETHING IS WRONG!!!!");
         }
@@ -241,6 +239,9 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
                 _claim(pid, tokenIds[i], toBeClaimed, currentCycleCount);
                 _total += toBeClaimed * multiplier / 100;
             }
+
+            Stakes[pid][tokenIds[i]].isActive = false;
+            CurrentStakedTokens[pid][msg.sender].remove(tokenIds[i]);
         }
         if (_total > 0) {
             require(Pools[pid].rewardContract.transferFrom(address(this), msg.sender, _total), "CANNOT GIVE REWARD!");
