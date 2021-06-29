@@ -101,8 +101,8 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
     }
 
     function createPool(NFTPool memory _pool) external onlyOwner {
-        Pools[currentPoolId] = _pool;
-        require(_pool.rewardContract.transferFrom(msg.sender, address(this), _pool.rewardSupply));
+        uint256 currentId = currentPoolId;
+        Pools[currentId] = _pool;
 
         emit PoolCreated(currentPoolId,
             address(_pool.nftContract),
@@ -113,6 +113,8 @@ contract SnowflakeNFTStake is Ownable, ERC165Storage {
             _pool.maxCycles,
             _pool.endingDate);
         currentPoolId += 1;
+
+        require(_pool.rewardContract.transferFrom(msg.sender, address(this), _pool.rewardSupply));
     }
 
     function updatePool(uint256 pid, uint256 endingDate, uint256 maxCycles) external onlyOwner {
